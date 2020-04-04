@@ -1,0 +1,11 @@
+Rectangular grid: 
+  Width: 1000px
+  Height: 1000px
+  Horizontal Dividers: 125
+  Vertical Dividers: 125
+  
+Transform:
+  Rotate the grid by 45deg
+
+Transfrom Window:
+  H: 57.74%
