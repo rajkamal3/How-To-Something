@@ -1,0 +1,6 @@
+Light Blue: #16c0ff, #bceefd, #72cff0, #4ba5d6, #8bd9f3
+Pink: #fd8e95, #f88088
+Grey: #bdbdc6, #818775
+Dark Blue: #353b52
+Brown: #aa4e4a
+Purple: #181319
