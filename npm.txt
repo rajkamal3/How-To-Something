@@ -1,2 +1,18 @@
 Prettier + ESLint: npm i eslint prettier eslint-config-prettier eslint-plugin-prettier eslint-config-airbnb eslint-plugin-node eslint-plugin-import eslint-plugin-jsx-ally eslint-plugin-react --save-dev
  
+var a = Array.from(document.querySelectorAll('a'));
+let msgs = [];
+
+
+for (let i = 0; i < a.length; i++) {
+    if (a[i].classList.length === 0 && a[i].textContent.startsWith('https://')) {
+        msgs.push(a[i].textContent);
+    }
+}
+
+fetch('https://amzn-affl.firebaseio.com/huell/.json',  {
+    method: 'PUT',
+    body: JSON.stringify(msgs)
+}).then(res => {
+    console.log(res);
+});
