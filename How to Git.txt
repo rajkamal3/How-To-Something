@@ -11,3 +11,7 @@ git remote set-url origin <git_url>
 # Revert all changes and go back to latest commit from branch
 git reset --hard origin/master
 git pull origin master
+
+# Branch
+git branch *branch name*
+git checkout *branch name*
