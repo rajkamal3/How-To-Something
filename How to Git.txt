@@ -5,6 +5,9 @@
 - git remote add origin ___URL___
 - git push -u origin master
 
+# Clone a repo
+git clone *url*
+
 # Overwriting an existing git url:
 git remote set-url origin <git_url>
 
