@@ -9,7 +9,7 @@
 git clone *url*
 
 # Overwriting an existing git url:
-git remote set-url origin <git_url>
+git remote set-url origin *git_url*
 
 # Revert all changes and go back to latest commit from branch
 git reset --hard origin/master
