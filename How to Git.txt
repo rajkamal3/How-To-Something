@@ -18,4 +18,8 @@ git pull origin master
 # Branch
 git branch *branch name*
 git checkout *branch name*
+
+# Create and commit to a new branch
+git checkout -b my_new_branch
+git commit
  
