@@ -24,3 +24,354 @@ git checkout -b my_new_branch
 git commit 
 
 #
+
+app
+const express = require('express');
+const dotenv = require('dotenv');
+const path = require('path');
+
+const { bankNiftyOpensDailyStrangle, bankNiftyClosesDailyStrangle } = require('./controllers/bankNiftyStrangle');
+
+dotenv.config({
+    path: `${__dirname}/config.env`
+});
+
+const app = express();
+
+app.use(express.json());
+
+dotenv.config({
+    path: `${__dirname}/../config.env`
+});
+
+app.get('/api/bankNiftyOpensDailyStrangle/:strangleDifference', bankNiftyOpensDailyStrangle);
+app.get('/api/bankNiftyClosesDailyStrangle/:strangleDifference', bankNiftyClosesDailyStrangle);
+
+if (false) {
+    app.use(express.static(`${__dirname}/../frontend/build`));
+    app.get('/*', (req, res) => res.sendFile(path.resolve(`${__dirname}/../frontend/build/index.html`)));
+} else {
+    app.get('/', (req, res) => {
+        res.send(`I'm a freakin' server!`);
+    });
+}
+
+app.listen(process.env.PORT || 3000, () => {
+    console.log(`App is running on port ${process.env.PORT || 3000}...`);
+});
+
+bns
+const axios = require('axios');
+const nextThursday = require('date-fns/nextThursday');
+const { loadSheet } = require('../utils/loadSheet');
+const { expiryHolidays } = require('../utils/constants');
+const { calculateOptionChainDifference } = require('../utils/calculateOptionChainDifference');
+
+const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const today = new Date(new Date().toJSON());
+const dayName = days[today.getDay()];
+
+let nextExpiry;
+
+if (dayName !== 'Thursday') {
+    nextExpiry = nextThursday(new Date());
+
+    expiryHolidays.filter(date => {
+        if (new Date(nextExpiry).toLocaleDateString() === new Date(date).toLocaleDateString()) {
+            nextExpiry.setDate(nextExpiry.getDate() - 1);
+        }
+    });
+} else {
+    nextExpiry = new Date(new Date().toJSON());
+}
+
+exports.bankNiftyOpensDailyStrangle = async (req, res, next) => {
+    let optionChainDailyStrangle;
+    let ceStartDailyStrangle;
+    let peStartDailyStrangle;
+    let strikePriceDailyStrangle;
+
+    let strangleDifference = req.params.strangleDifference;
+    console.log('str diff ' + strangleDifference);
+    let optionChainDifference = calculateOptionChainDifference(strangleDifference);
+    console.log('opt chn diff ' + optionChainDifference);
+
+    axios
+        .post(process.env.OPTIONCHAIN_URL, {
+            aTyp: 'OPTIDX',
+            exp: new Date(nextExpiry).toDateString().substr(4, 11).trim(),
+            uSym: 'BANKNIFTY'
+        })
+        .then(res => {
+            optionChainDailyStrangle = res.data.opChn;
+
+            optionChainDailyStrangle.map(option => {
+                if (option.atm === true) {
+                    const atm = optionChainDailyStrangle.indexOf(option);
+                    const otmCe = optionChainDailyStrangle[atm + Number(optionChainDifference)];
+                    const otmPe = optionChainDailyStrangle[atm - Number(optionChainDifference)];
+
+                    strikePriceDailyStrangle = option.stkPrc;
+                    ceStartDailyStrangle = otmCe.ceQt.ltp;
+                    peStartDailyStrangle = otmPe.peQt.ltp;
+                }
+            });
+        })
+        .catch(err => {
+            console.log('Failed to fetch data...');
+        });
+
+    let sheet;
+
+    if (Number(optionChainDifference > 0)) {
+        sheet = await loadSheet(Number(Math.abs(optionChainDifference)) - 1);
+    } else {
+        sheet = await loadSheet(Number(Math.abs(optionChainDifference)));
+    }
+
+    console.log('ld sheetetet ' + Number(Math.abs(optionChainDifference)) - 1);
+
+    console.log('Market opens...');
+
+    await sheet.addRow({
+        Date: new Date().toGMTString().substr(5, 11),
+        'Strike Price': strikePriceDailyStrangle,
+        'CE Start': ceStartDailyStrangle,
+        'CE End': '',
+        'PE Start': peStartDailyStrangle,
+        'PE End': '',
+        Total: ''
+    });
+
+    res.status(200).json({
+        status: 'Success'
+    });
+};
+
+exports.bankNiftyClosesDailyStrangle = async (req, res, next) => {
+    let optionChainDailyStrangle;
+    let strikePriceDailyStrangle;
+
+    let strangleDifference = req.params.strangleDifference;
+
+    let optionChainDifference = calculateOptionChainDifference(strangleDifference);
+    console.log('chaindiff' + optionChainDifference);
+
+    console.log('Fetching data...');
+
+    axios
+        .post(process.env.OPTIONCHAIN_URL, {
+            aTyp: 'OPTIDX',
+            exp: new Date(nextExpiry).toDateString().substr(4, 11).trim(),
+            uSym: 'BANKNIFTY'
+        })
+        .then(res => {
+            optionChainDailyStrangle = res.data.opChn;
+        })
+        .catch(err => {
+            console.log('Failed to fetch data...');
+        });
+
+    let sheet;
+
+    if (Number(optionChainDifference > 0)) {
+        sheet = await loadSheet(Number(Math.abs(optionChainDifference)) - 1);
+    } else {
+        sheet = await loadSheet(Number(Math.abs(optionChainDifference)));
+    }
+
+    console.log('Market closes...');
+
+    await sheet.loadCells('A1:G500');
+    const lastRow = await sheet.getRows();
+    const currentCell = lastRow[lastRow.length - 1]._rowNumber;
+    const todayStrike = sheet.getCellByA1('B' + currentCell).value.toString() + '.0';
+
+    let ceEnd, peEnd;
+
+    optionChainDailyStrangle.map(option => {
+        if (option.stkPrc === todayStrike) {
+            const atm = optionChainDailyStrangle.indexOf(option);
+            console.log(atm);
+            const otmCe = optionChainDailyStrangle[atm + Number(optionChainDifference)];
+            const otmPe = optionChainDailyStrangle[atm - Number(optionChainDifference)];
+
+            ceEnd = otmCe.ceQt.ltp;
+            peEnd = otmPe.peQt.ltp;
+            strikePriceDailyStrangle = option.stkPrc;
+        }
+    });
+
+    sheet.getCellByA1('D' + currentCell).value = ceEnd;
+    sheet.getCellByA1('F' + currentCell).value = peEnd;
+    sheet.getCellByA1('G' + currentCell).formula = `=MINUS(C${currentCell},D${currentCell}) + MINUS(E${currentCell},F${currentCell})`;
+
+    await sheet.saveUpdatedCells();
+
+    res.status(200).json({
+        status: 'Success'
+    });
+};
+
+cocd
+const calculateOptionChainDifference = difference => {
+    let optionChainDifference;
+
+    switch (Number(difference)) {
+        case 200:
+            optionChainDifference = 1;
+            break;
+        case 400:
+            optionChainDifference = 2;
+            break;
+        case 600:
+            optionChainDifference = 3;
+            break;
+        case 800:
+            optionChainDifference = 4;
+            break;
+        case 1000:
+            optionChainDifference = 5;
+            break;
+        case 2000:
+            optionChainDifference = '-5';
+            break;
+    }
+
+    return optionChainDifference;
+};
+
+module.exports = { calculateOptionChainDifference };
+
+hm
+import React from 'react';
+import styles from './home.module.css';
+import axios from 'axios';
+
+const Home = () => {
+    const bankNiftyOpens = () => {
+        axios
+            .get('/api/bankNiftyOpensDailyStrangle/200')
+            .then(res => {
+                alert('Strangle 200: ' + res.data.status);
+            })
+            .catch(err => {
+                alert('Strangle 200: An error occured!');
+            });
+
+        axios
+            .get('/api/bankNiftyOpensDailyStrangle/400')
+            .then(res => {
+                alert('Strangle 400: ' + res.data.status);
+            })
+            .catch(err => {
+                alert('Strangle 400: An error occured!');
+            });
+        axios
+            .get('/api/bankNiftyOpensDailyStrangle/600')
+            .then(res => {
+                alert('Strangle 600: ' + res.data.status);
+            })
+            .catch(err => {
+                alert('Strangle 600: An error occured!');
+            });
+        axios
+            .get('/api/bankNiftyOpensDailyStrangle/800')
+            .then(res => {
+                alert('Strangle 800: ' + res.data.status);
+            })
+            .catch(err => {
+                alert('Strangle 800: An error occured!');
+            });
+        axios
+            .get('/api/bankNiftyOpensDailyStrangle/1000')
+            .then(res => {
+                alert('Strangle 1000: ' + res.data.status);
+            })
+            .catch(err => {
+                alert('Strangle 1000: An error occured!');
+            });
+        axios
+            .get('/api/bankNiftyOpensDailyStrangle/2000')
+            .then(res => {
+                alert('Strangle Opp 1000: ' + res.data.status);
+            })
+            .catch(err => {
+                alert('Strangle Opp 1000: An error occured!');
+            });
+
+        document.querySelector('.marketOpensButton').style.backgroundColor = '#90c695';
+    };
+
+    const bankNiftyCloses = () => {
+        axios
+            .get('/api/bankNiftyClosesDailyStrangle/200')
+            .then(res => {
+                alert('Straddle 200: ' + res.data.status);
+            })
+            .catch(err => {
+                alert('Straddle 200: An error occured!');
+            });
+        axios
+            .get('/api/bankNiftyClosesDailyStrangle/400')
+            .then(res => {
+                alert('Straddle 400: ' + res.data.status);
+            })
+            .catch(err => {
+                alert('Straddle 400: An error occured!');
+            });
+        axios
+            .get('/api/bankNiftyClosesDailyStrangle/600')
+            .then(res => {
+                alert('Straddle 600: ' + res.data.status);
+            })
+            .catch(err => {
+                alert('Straddle 600: An error occured!');
+            });
+        axios
+            .get('/api/bankNiftyClosesDailyStrangle/800')
+            .then(res => {
+                alert('Straddle 800: ' + res.data.status);
+            })
+            .catch(err => {
+                alert('Straddle 800: An error occured!');
+            });
+        axios
+            .get('/api/bankNiftyClosesDailyStrangle/1000')
+            .then(res => {
+                alert('Straddle 1000: ' + res.data.status);
+            })
+            .catch(err => {
+                alert('Straddle 1000: An error occured!');
+            });
+        axios
+            .get('/api/bankNiftyClosesDailyStrangle/2000')
+            .then(res => {
+                alert('Straddle Opp 1000: ' + res.data.status);
+            })
+            .catch(err => {
+                alert('Straddle Opp 1000: An error occured!');
+            });
+
+        document.querySelector('.marketClosesButton').style.backgroundColor = '#90c695';
+    };
+
+    return (
+        <div className={styles.container}>
+            <div className={styles.header}>projectO</div>
+            <div className={styles.strategy}>
+                <div>Short Strangle - Bank Nifty</div>
+                <div className={styles.buttonsContainer}>
+                    <div className={[styles.marketOpensClosesButtons, 'marketOpensButton'].join(' ')} onClick={bankNiftyOpens}>
+                        Market Opens
+                    </div>
+                    <div className={[styles.marketOpensClosesButtons, 'marketClosesButton'].join(' ')} onClick={bankNiftyCloses}>
+                        Market Closes
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export default Home;
