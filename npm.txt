@@ -23,3 +23,5 @@ GOOGLE_SHEET_ID=12OmX5c5RAqMv1GJe1ZOBSmwCmrVhU_XcVvVARaXN6f0
 OPTIONCHAIN_URL=https://ewmw.edelweiss.in/api/Market/optionchainguest
 PORT=3000
 NODE_ENV=dev
+
+https://docs.google.com/spreadsheets/d/12OmX5c5RAqMv1GJe1ZOBSmwCmrVhU_XcVvVARaXN6f0/edit#gid=0
