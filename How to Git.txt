@@ -25,6 +25,8 @@ git commit
 
 #
 
+Prac: https://docs.google.com/spreadsheets/d/1O3FrUQ7cW3XEoS2Sv5VjaGxbZ8mrYYwM2jX_E4jaRF8/edit?usp=sharing
+
 app
 const express = require('express');
 const dotenv = require('dotenv');
